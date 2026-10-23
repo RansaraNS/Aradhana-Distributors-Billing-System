@@ -21,6 +21,7 @@ export interface InvoiceDraft {
 
 export interface InvoiceRecord {
   id: string
+  shopId: string
   invoiceNumber: string
   customerName: string
   subtotal: number

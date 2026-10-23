@@ -9,6 +9,7 @@ import Items from './pages/Items'
 import Login from './pages/Login'
 import Placeholder from './pages/Placeholder'
 import CreateInvoice from './pages/CreateInvoice'
+import InvoiceHistory from './pages/InvoiceHistory'
 
 function AuthenticatedApp() {
   const [session, setSession] = useState<Session | null>(null)
@@ -52,15 +53,7 @@ function AuthenticatedApp() {
         <Route index element={<Dashboard />} />
         <Route path="items" element={<Items />} />
         <Route path="invoices/new" element={<CreateInvoice />} />
-        <Route
-          path="invoices"
-          element={
-            <Placeholder
-              title="Invoice History"
-              description="Search saved invoices and reprint receipts."
-            />
-          }
-        />
+        <Route path="invoices" element={<InvoiceHistory />} />
         <Route
           path="settings"
           element={

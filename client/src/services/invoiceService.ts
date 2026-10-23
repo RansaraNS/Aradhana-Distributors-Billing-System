@@ -6,6 +6,8 @@ import {
   calculateSubtotal,
   roundMoney,
 } from '../types/invoice'
+import { getCurrentShopContext, getCachedShopContext } from './shopService'
+import { syncPendingInvoices } from './invoiceSyncService'
 
 function generateInvoiceNumber(): string {
   const now = new Date()
@@ -44,10 +46,21 @@ export async function createInvoice(input: {
     throw new Error('The discount cannot exceed the invoice subtotal.')
   }
 
+  const context = navigator.onLine
+    ? await getCurrentShopContext()
+    : await getCachedShopContext()
+
+    if (!context) {
+        throw new Error(
+            'Connect to the internet and open the application once before creating offline invoices.'
+        )
+    }
+
   const invoice: InvoiceRecord = {
     id: crypto.randomUUID(),
     invoiceNumber: generateInvoiceNumber(),
     customerName: input.customerName.trim(),
+    shopId: context.shopId,
     subtotal,
     discount: roundMoney(input.discount),
     total: calculateInvoiceTotal(lines, input.discount),
@@ -58,10 +71,27 @@ export async function createInvoice(input: {
 
   await db.invoices.add(invoice)
 
+  if (navigator.onLine) {
+    try {
+        await syncPendingInvoices()
+    } catch (error) {
+        // Keep the invoice locally queued if the cloud sync fails.
+        console.error('Invoice saved locally but sync failed:', error)
+    }
+    }
+
   return invoice
 }
 
 export async function getInvoices(): Promise<InvoiceRecord[]> {
+  if (navigator.onLine) {
+    try {
+      await syncPendingInvoices()
+    } catch (error) {
+      console.error('Invoice sync will be retried:', error)
+    }
+  }
+
   return db.invoices.orderBy('createdAt').reverse().toArray()
 }
 
