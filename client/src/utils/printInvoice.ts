@@ -6,6 +6,13 @@ const money = (value: number) =>
     maximumFractionDigits: 2,
   })}`
 
+// Plain number with 2 decimals (no "Rs." prefix), used in the item rows
+const num = (value: number) =>
+  value.toLocaleString('en-LK', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (character) => {
     const entities: Record<string, string> = {
@@ -26,34 +33,54 @@ export function printInvoice(invoice: InvoiceRecord): void {
     return
   }
 
+  // NOTE: `piecesPerUnit` (e.g. 24 pieces in 1 unit) and `mrp` (label price)
+  // are placeholder field names. Rename them to match your InvoiceRecord line type.
+  type ReceiptLine = (typeof invoice.lines)[number] & {
+    piecesPerUnit?: number
+    mrp?: number
+  }
+
+  const lineFigures = (line: ReceiptLine) => {
+    const perUnit = Number(line.piecesPerUnit || 0)
+    const qty = Number(line.quantity || 0)
+    const isUnit = line.quantityType === 'unit'
+
+    const pieces = isUnit ? qty * (perUnit || 1) : qty
+    const units = isUnit ? qty : perUnit ? pieces / perUnit : 0
+
+    return {
+      pieces,
+      units,
+      // price of one full unit (pieces per unit x price per piece)
+      unitPrice: perUnit ? line.unitPrice * perUnit : 0,
+    }
+  }
+
   const totalQuantity = invoice.lines.reduce(
-    (sum, line) => sum + Number(line.quantity || 0),
+    (sum, line) => sum + lineFigures(line as ReceiptLine).pieces,
     0,
   )
 
   const itemRows = invoice.lines
-    .map((line, index) => {
-      const quantity =
-        line.quantityType === 'unit'
-          ? `${line.quantity} Unit(s)`
-          : `${line.quantity} Piece(s)`
+    .map((rawLine) => {
+      const line = rawLine as ReceiptLine
+      const { pieces, units, unitPrice } = lineFigures(line)
+
+      const qtyText = units ? `${pieces} (${units})` : `${pieces}`
+      const priceText = unitPrice
+        ? `${num(line.unitPrice)} (${num(unitPrice)})`
+        : num(line.unitPrice)
+      const nameText = line.mrp
+        ? `${escapeHtml(line.itemName)} - ${num(line.mrp)}`
+        : escapeHtml(line.itemName)
 
       return `
         <div class="item">
-          <div class="item-name">
-            ${index + 1}. ${escapeHtml(line.itemName)}
-          </div>
-          <div class="item-grid">
-            <span class="item-label">Qty</span>
-            <span class="item-value">${quantity}</span>
-          </div>
-          <div class="item-grid">
-            <span class="item-label">Rate / Piece</span>
-            <span class="item-value">${money(line.unitPrice)}</span>
-          </div>
-          <div class="item-grid line-total">
-            <span class="item-label">Amount</span>
-            <span class="item-value">${money(line.lineTotal)}</span>
+          <div class="item-name">${nameText}</div>
+          <div class="item-cols">
+            <span class="col-qty">${qtyText}</span>
+            <span class="col-price">${priceText}</span>
+            <span class="col-amt">${num(line.lineTotal)}</span>
           </div>
         </div>
       `
@@ -74,9 +101,11 @@ export function printInvoice(invoice: InvoiceRecord): void {
         <title>${escapeHtml(invoice.invoiceNumber)}</title>
 
         <style>
-            :root {
-            --receipt-font: Arial, "Helvetica Neue", Helvetica, sans-serif;
-            }
+          :root {
+            /* Change the receipt font in this one place */
+            --receipt-font: Verdana, Geneva, sans-serif;
+          }
+
           @page {
             size: 80mm auto;
             margin: 0;
@@ -91,7 +120,7 @@ export function printInvoice(invoice: InvoiceRecord): void {
             margin: 0 auto;
             padding: 4mm 0;
             font-family: var(Verdana, Geneva, sans-serif);
-            font-size: 15px;
+            font-size: 11px;
             font-weight: bold;
             color: #000;
             line-height: 1.35;
@@ -110,13 +139,13 @@ export function printInvoice(invoice: InvoiceRecord): void {
           }
 
           .business-brand {
-            font-size: 16px;
+            font-size: 12px;
             font-weight: 900;
             margin-top: 4px;
           }
 
           .header-info {
-            font-size: 13px;
+            font-size: 11px;
             font-weight: bold;
             margin-top: 3px;
             overflow-wrap: anywhere;
@@ -167,38 +196,45 @@ export function printInvoice(invoice: InvoiceRecord): void {
           /* ---------- Items ---------- */
           .item {
             padding: 8px 0;
-            border-bottom: 2px dashed #555;
+            border-bottom: 2px dashed #000;
             break-inside: avoid;
           }
 
           .item-name {
             font-weight: 900;
-            font-size: 16px;
+            font-size: 14px;
             overflow-wrap: anywhere;
           }
 
-          .item-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 6px;
-            margin-top: 3px;
-            font-size: 14px;
-          }
-
-          .item-label {
-            font-weight: bold;
-          }
-
-          .item-value {
-            font-weight: 900;
-            text-align: right;
-          }
-
-          .line-total {
-            font-size: 15px;
+          .item-cols {
+            display: grid;
+            grid-template-columns: 0.8fr 2fr 1.1fr;
+            gap: 4px;
             margin-top: 5px;
-            padding-top: 3px;
-            border-top: 1px dotted #000;
+            font-size: 13px;
+            font-weight: 900;
+          }
+
+          .item-head {
+            font-size: 15px;
+            margin: 0 0 4px;
+          }
+
+          .item-head span {
+            border-bottom: 2px solid #000;
+            padding-bottom: 2px;
+          }
+
+          .col-qty {
+            text-align: left;
+          }
+
+          .col-price {
+            text-align: center;
+          }
+
+          .col-amt {
+            text-align: right;
           }
 
           /* ---------- Summary ---------- */
@@ -207,14 +243,14 @@ export function printInvoice(invoice: InvoiceRecord): void {
             justify-content: space-between;
             gap: 8px;
             margin: 6px 0;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 900;
           }
 
           .grand-total {
-            font-size: 21px;
+            font-size: 18px;
             font-weight: 900;
-            padding: 4px 0;
+            padding: 3px 0;
           }
 
           /* ---------- Signatures ---------- */
@@ -240,7 +276,7 @@ export function printInvoice(invoice: InvoiceRecord): void {
           /* ---------- Footer ---------- */
           .thanks {
             text-align: center;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 900;
             margin-top: 18px;
           }
@@ -249,7 +285,7 @@ export function printInvoice(invoice: InvoiceRecord): void {
             text-align: center;
             margin-top: 10px;
             line-height: 1.5;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: bold;
           }
 
@@ -298,7 +334,8 @@ export function printInvoice(invoice: InvoiceRecord): void {
 
         <div class="divider-solid"></div>
 
-        <div class="heading">SALES INVOICE</div>
+        <!-- Invoice details -->
+        <div class="sub-heading">Invoice Details</div>
 
         <div class="info-row">
           <span class="info-label">Invoice No:</span>
@@ -315,24 +352,22 @@ export function printInvoice(invoice: InvoiceRecord): void {
           <span class="info-value">${escapeHtml(invoice.customerName || 'Walk-in Customer')}</span>
         </div>
 
-        <div class="info-row">
-          <span class="info-label">Items:</span>
-          <span class="info-value">${invoice.lines.length} item(s)</span>
-        </div>
-
         <div class="divider-solid"></div>
 
         <!-- Items -->
-        <div class="sub-heading">Items</div>
+        <div class="item-cols item-head">
+          <span class="col-qty">Qty</span>
+          <span class="col-price">Price</span>
+          <span class="col-amt">Amount</span>
+        </div>
 
         ${itemRows}
 
-        <div class="divider"></div>
-
         <!-- Totals -->
         <div class="total-row">
-          <span>Total Qty</span>
-          <span>${totalQuantity}</span>
+          <span>Items:</span>
+          <span>${invoice.lines.length} item(s)</span>
+        </div>
         </div>
 
         <div class="total-row">
