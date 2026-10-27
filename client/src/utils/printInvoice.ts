@@ -1,4 +1,4 @@
-import type { InvoiceRecord } from '../types/invoice'
+import type { InvoiceLine, InvoiceRecord } from '../types/invoice'
 
 const money = (value: number) =>
   `Rs. ${value.toLocaleString('en-LK', {
@@ -35,12 +35,7 @@ export function printInvoice(invoice: InvoiceRecord): void {
 
   // NOTE: `piecesPerUnit` (e.g. 24 pieces in 1 unit) and `mrp` (label price)
   // are placeholder field names. Rename them to match your InvoiceRecord line type.
-  type ReceiptLine = (typeof invoice.lines)[number] & {
-    piecesPerUnit?: number
-    mrp?: number
-  }
-
-  const lineFigures = (line: ReceiptLine) => {
+  const lineFigures = (line: InvoiceLine) => {
     const perUnit = Number(line.piecesPerUnit || 0)
     const qty = Number(line.quantity || 0)
     const isUnit = line.quantityType === 'unit'
@@ -51,27 +46,20 @@ export function printInvoice(invoice: InvoiceRecord): void {
     return {
       pieces,
       units,
-      // price of one full unit (pieces per unit x price per piece)
       unitPrice: perUnit ? line.unitPrice * perUnit : 0,
     }
   }
 
-  const totalQuantity = invoice.lines.reduce(
-    (sum, line) => sum + lineFigures(line as ReceiptLine).pieces,
-    0,
-  )
-
   const itemRows = invoice.lines
-    .map((rawLine) => {
-      const line = rawLine as ReceiptLine
+    .map((line) => {
       const { pieces, units, unitPrice } = lineFigures(line)
 
       const qtyText = units ? `${pieces} (${units})` : `${pieces}`
       const priceText = unitPrice
         ? `${num(line.unitPrice)} (${num(unitPrice)})`
         : num(line.unitPrice)
-      const nameText = line.mrp
-        ? `${escapeHtml(line.itemName)} - ${num(line.mrp)}`
+      const nameText = line.sellingPrice
+        ? `${escapeHtml(line.itemName)} - ${num(line.sellingPrice)}`
         : escapeHtml(line.itemName)
 
       return `
@@ -116,10 +104,10 @@ export function printInvoice(invoice: InvoiceRecord): void {
           }
 
           body {
-            width: 74mm;
+            width: 70mm;
             margin: 0 auto;
             padding: 4mm 0;
-            font-family: var(Verdana, Geneva, sans-serif);
+            font-family: var(--receipt-font);
             font-size: 11px;
             font-weight: bold;
             color: #000;
@@ -202,16 +190,16 @@ export function printInvoice(invoice: InvoiceRecord): void {
 
           .item-name {
             font-weight: 900;
-            font-size: 14px;
+            font-size: 12px;
             overflow-wrap: anywhere;
           }
 
           .item-cols {
             display: grid;
             grid-template-columns: 0.8fr 2fr 1.1fr;
-            gap: 4px;
+            gap: 3px;
             margin-top: 5px;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 900;
           }
 
@@ -251,6 +239,10 @@ export function printInvoice(invoice: InvoiceRecord): void {
             font-size: 18px;
             font-weight: 900;
             padding: 3px 0;
+          }
+
+          .total-row span:last-child {
+            white-space: nowrap;
           }
 
           /* ---------- Signatures ---------- */
@@ -310,7 +302,7 @@ export function printInvoice(invoice: InvoiceRecord): void {
             }
 
             body {
-              width: 74mm;
+              width: 70mm;
               padding: 2mm 0;
             }
           }
@@ -325,7 +317,6 @@ export function printInvoice(invoice: InvoiceRecord): void {
         <!-- Heading -->
         <div class="center">
           <div class="business-name">ARADHANA DISTRIBUTORS</div>
-          <div class="business-brand">"ARADHANA"</div>
           <div class="header-info">Elpitiya Road, Hennathota, Dodanduwa.</div>
           <div class="header-info">Hotline : 071 313 5420</div>
           <div class="header-info">Tel : 091 227 5420</div>
@@ -368,17 +359,20 @@ export function printInvoice(invoice: InvoiceRecord): void {
           <span>Items:</span>
           <span>${invoice.lines.length} item(s)</span>
         </div>
-        </div>
 
         <div class="total-row">
           <span>Subtotal</span>
           <span>${money(invoice.subtotal)}</span>
         </div>
 
-        <div class="total-row">
-          <span>Discount</span>
-          <span>- ${money(invoice.discount)}</span>
-        </div>
+        ${
+            invoice.discount > 0
+              ? `<div class="total-row">
+                  <span>Discount</span>
+                  <span>- ${money(invoice.discount)}</span>
+                </div>`
+              : ''
+          }
 
         <div class="divider-solid"></div>
 

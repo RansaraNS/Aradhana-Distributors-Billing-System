@@ -10,6 +10,7 @@ export interface InvoiceLine {
   quantity: number
   unitPrice: number
   piecesPerUnit: number
+  sellingPrice: number
   lineTotal: number
 }
 

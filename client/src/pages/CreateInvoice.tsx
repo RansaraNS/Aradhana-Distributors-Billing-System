@@ -68,6 +68,7 @@ export default function CreateInvoice() {
       quantityType: 'piece',
       quantity: 1,
       unitPrice: item.buyingPrice,
+      sellingPrice: item.sellingPrice,
       piecesPerUnit: item.piecesPerUnit,
       lineTotal: item.buyingPrice,
     }
